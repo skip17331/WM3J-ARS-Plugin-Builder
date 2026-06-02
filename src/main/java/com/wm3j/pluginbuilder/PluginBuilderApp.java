@@ -11,6 +11,7 @@ import com.wm3j.pluginbuilder.core.PluginValidator;
 import com.wm3j.pluginbuilder.core.PluginValidator.Issue;
 import com.wm3j.pluginbuilder.core.Skeletons;
 import com.wm3j.pluginbuilder.ui.EntryFieldsEditor;
+import com.wm3j.pluginbuilder.ui.CabrilloMappingEditor;
 
 import javafx.application.Application;
 import javafx.geometry.Insets;
@@ -118,14 +119,17 @@ public class PluginBuilderApp extends Application {
         ((Label) top.getChildren().get(0)).setStyle("-fx-font-weight:bold; -fx-padding:6 8;");
 
         EntryFieldsEditor fieldsEditor = new EntryFieldsEditor(editor, this::setStatus);
+        CabrilloMappingEditor cabrilloEditor = new CabrilloMappingEditor(editor, this::setStatus);
         Tab jsonTab = new Tab("JSON", editor);
         Tab fieldsTab = new Tab("Entry Fields", fieldsEditor);
-        TabPane tabs = new TabPane(jsonTab, fieldsTab);
+        Tab cabrilloTab = new Tab("Cabrillo", cabrilloEditor);
+        TabPane tabs = new TabPane(jsonTab, fieldsTab, cabrilloTab);
         tabs.getTabs().forEach(t -> t.setClosable(false));
-        // Keep the Entry Fields table in sync with the JSON whenever you open it.
+        // Keep the structured tabs in sync with the JSON whenever you open one.
         // (Apply writes back explicitly so manual JSON edits are never clobbered.)
         tabs.getSelectionModel().selectedItemProperty().addListener((o, a, b) -> {
             if (b == fieldsTab) fieldsEditor.loadFromJson(false);
+            else if (b == cabrilloTab) cabrilloEditor.loadFromJson(false);
         });
 
         SplitPane center = new SplitPane(withTitle("Your plugins (double-click to open)", fileList), tabs);
