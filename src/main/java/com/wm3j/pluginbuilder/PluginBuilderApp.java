@@ -10,6 +10,7 @@ import com.wm3j.pluginbuilder.core.PluginIo;
 import com.wm3j.pluginbuilder.core.PluginValidator;
 import com.wm3j.pluginbuilder.core.PluginValidator.Issue;
 import com.wm3j.pluginbuilder.core.Skeletons;
+import com.wm3j.pluginbuilder.ui.EntryFieldsEditor;
 
 import javafx.application.Application;
 import javafx.geometry.Insets;
@@ -116,8 +117,19 @@ public class PluginBuilderApp extends Application {
         VBox top = new VBox(new Label(engineStatus), bar);
         ((Label) top.getChildren().get(0)).setStyle("-fx-font-weight:bold; -fx-padding:6 8;");
 
-        SplitPane center = new SplitPane(withTitle("Your plugins (double-click to open)", fileList), editor);
-        center.setDividerPositions(0.28);
+        EntryFieldsEditor fieldsEditor = new EntryFieldsEditor(editor, this::setStatus);
+        Tab jsonTab = new Tab("JSON", editor);
+        Tab fieldsTab = new Tab("Entry Fields", fieldsEditor);
+        TabPane tabs = new TabPane(jsonTab, fieldsTab);
+        tabs.getTabs().forEach(t -> t.setClosable(false));
+        // Keep the Entry Fields table in sync with the JSON whenever you open it.
+        // (Apply writes back explicitly so manual JSON edits are never clobbered.)
+        tabs.getSelectionModel().selectedItemProperty().addListener((o, a, b) -> {
+            if (b == fieldsTab) fieldsEditor.loadFromJson(false);
+        });
+
+        SplitPane center = new SplitPane(withTitle("Your plugins (double-click to open)", fileList), tabs);
+        center.setDividerPositions(0.26);
 
         TitledPane issuePane = new TitledPane("Validation", issues);
         issuePane.setCollapsible(false);
@@ -219,6 +231,8 @@ public class PluginBuilderApp extends Application {
             status.setText("Save failed: " + e.getMessage());
         }
     }
+
+    private void setStatus(String s) { status.setText(s); }
 
     public static void main(String[] args) { launch(args); }
 }
