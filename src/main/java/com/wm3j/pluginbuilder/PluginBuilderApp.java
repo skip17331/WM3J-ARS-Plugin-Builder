@@ -13,6 +13,7 @@ import com.wm3j.pluginbuilder.core.Skeletons;
 import com.wm3j.pluginbuilder.ui.EntryFieldsEditor;
 import com.wm3j.pluginbuilder.ui.CabrilloMappingEditor;
 import com.wm3j.pluginbuilder.ui.ScoringEditor;
+import com.wm3j.pluginbuilder.ui.AwardEditor;
 
 import javafx.application.Application;
 import javafx.geometry.Insets;
@@ -122,11 +123,14 @@ public class PluginBuilderApp extends Application {
         EntryFieldsEditor fieldsEditor = new EntryFieldsEditor(editor, this::setStatus);
         CabrilloMappingEditor cabrilloEditor = new CabrilloMappingEditor(editor, this::setStatus);
         ScoringEditor scoringEditor = new ScoringEditor(editor, this::setStatus);
+        AwardEditor awardEditor = new AwardEditor(editor, this::setStatus);
         Tab jsonTab = new Tab("JSON", editor);
         Tab fieldsTab = new Tab("Entry Fields", fieldsEditor);
         Tab scoringTab = new Tab("Scoring", scoringEditor);
         Tab cabrilloTab = new Tab("Cabrillo", cabrilloEditor);
-        TabPane tabs = new TabPane(jsonTab, fieldsTab, scoringTab, cabrilloTab);
+        Tab awardTab = new Tab("Award", awardEditor);
+        // Contest-shaped tabs first, then Award (used when editing an award plugin).
+        TabPane tabs = new TabPane(jsonTab, fieldsTab, scoringTab, cabrilloTab, awardTab);
         tabs.getTabs().forEach(t -> t.setClosable(false));
         // Keep the structured tabs in sync with the JSON whenever you open one.
         // (Apply writes back explicitly so manual JSON edits are never clobbered.)
@@ -134,6 +138,7 @@ public class PluginBuilderApp extends Application {
             if (b == fieldsTab) fieldsEditor.loadFromJson(false);
             else if (b == cabrilloTab) cabrilloEditor.loadFromJson(false);
             else if (b == scoringTab) scoringEditor.loadFromJson(false);
+            else if (b == awardTab) awardEditor.loadFromJson(false);
         });
 
         SplitPane center = new SplitPane(withTitle("Your plugins (double-click to open)", fileList), tabs);
