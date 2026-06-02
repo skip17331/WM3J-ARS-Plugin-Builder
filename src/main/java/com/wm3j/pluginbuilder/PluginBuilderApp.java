@@ -1,46 +1,54 @@
 package com.wm3j.pluginbuilder;
 
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jlog.award.AwardLoader;
 import com.jlog.award.AwardPlugin;
 import com.jlog.db.DatabaseManager;
 import com.jlog.plugin.ContestPlugin;
 import com.jlog.plugin.PluginLoader;
+import com.wm3j.pluginbuilder.core.PluginIo;
+import com.wm3j.pluginbuilder.core.PluginValidator;
+import com.wm3j.pluginbuilder.core.PluginValidator.Issue;
+import com.wm3j.pluginbuilder.core.Skeletons;
 
 import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
-import javafx.scene.control.Label;
-import javafx.scene.control.ListView;
-import javafx.scene.control.Tab;
-import javafx.scene.control.TabPane;
+import javafx.scene.control.*;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+import javafx.scene.text.Font;
+import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
- * ARS Plugin Builder — scaffold.
+ * ARS Plugin Builder — editor (v0.1).
  *
- * <p>Standalone authoring tool for WM3J ARS Suite contest &amp; award plugins.
- * This is the foundation only: it proves the {@code j-log-engine} dependency is
- * wired (real {@link PluginLoader}/{@link AwardLoader}/model classes on the
- * classpath) by listing the plugins the engine can see. The form-driven editor,
- * validation, and Cabrillo/score preview land on top of this shell.
+ * <p>Open a plugin (from the user drop-in dirs or a file), or start a new one
+ * from a skeleton; edit the JSON; <b>Validate</b> runs the real engine model
+ * through {@link PluginValidator} (the spec as checks); <b>Save</b> writes to
+ * {@code ~/.j-log/plugins/} or {@code ~/.j-log/awards/} (refusing on ERRORs).
  *
- * <p>The builder shares the operator's {@code ~/.j-log/} directory (it reads the
- * bundled plugins from the engine jar and reads/writes the auto-loaded
- * {@code ~/.j-log/plugins/} and {@code ~/.j-log/awards/} drop-in dirs), so it
- * calls {@link DatabaseManager#initAll()} on startup exactly as the suite does.
+ * <p>The JSON text area is the canonical editable surface for now — full-fidelity
+ * (nothing the model doesn't cover is lost). Field-by-field form controls build
+ * on the same {@link PluginIo}/{@link PluginValidator} core next.
  */
 public class PluginBuilderApp extends Application {
 
     private String engineStatus = "";
-    private List<ContestPlugin> contestPlugins = List.of();
-    private List<AwardPlugin>   awardPlugins   = List.of();
+    private final TextArea editor = new TextArea();
+    private final ListView<Issue> issues = new ListView<>();
+    private final ListView<Path> fileList = new ListView<>();
+    private final Label status = new Label();
 
-    /** Version from the jar manifest (Implementation-Version); "dev" unpackaged. */
     public static String version() {
         String v = PluginBuilderApp.class.getPackage().getImplementationVersion();
         return (v != null && !v.isBlank()) ? v : "dev";
@@ -49,15 +57,10 @@ public class PluginBuilderApp extends Application {
     @Override
     public void init() {
         try {
-            // Sets ~/.j-log as the data dir and opens the shared DBs. PluginLoader/
-            // AwardLoader resolve their user drop-in dirs from this, so it must run
-            // before either loader is used.
             DatabaseManager.getInstance().initAll();
-            contestPlugins = PluginLoader.getInstance().getAvailablePlugins();
-            awardPlugins   = AwardLoader.getInstance().getAvailableAwards();
-            engineStatus = "j-log-engine wired — "
-                    + contestPlugins.size() + " contest plugins, "
-                    + awardPlugins.size() + " awards visible";
+            List<ContestPlugin> c = PluginLoader.getInstance().getAvailablePlugins();
+            List<AwardPlugin> a = AwardLoader.getInstance().getAvailableAwards();
+            engineStatus = "j-log-engine wired — " + c.size() + " contest plugins, " + a.size() + " awards visible";
         } catch (Exception e) {
             engineStatus = "Engine init failed: " + e.getClass().getSimpleName() + " — " + e.getMessage();
         }
@@ -65,44 +68,157 @@ public class PluginBuilderApp extends Application {
 
     @Override
     public void start(Stage stage) {
-        Label header = new Label(engineStatus);
-        header.setStyle("-fx-font-weight:bold; -fx-padding:6 0;");
+        editor.setFont(Font.font("monospace", 13));
+        editor.setPromptText("New Contest / New Award / Open… to begin.");
 
-        ListView<String> contestList = new ListView<>();
-        contestList.getItems().setAll(contestPlugins.stream()
-                .map(p -> p.getContestId() + "   —   " + p.getContestName()
-                        + (p.getVersion() != null ? "  v" + p.getVersion() : ""))
-                .sorted()
-                .collect(Collectors.toList()));
+        issues.setCellFactory(lv -> new ListCell<>() {
+            @Override protected void updateItem(Issue it, boolean empty) {
+                super.updateItem(it, empty);
+                if (empty || it == null) { setText(null); setStyle(""); return; }
+                setText(it.toString());
+                setStyle(switch (it.severity()) {
+                    case ERROR -> "-fx-text-fill:#c0392b;";
+                    case WARN  -> "-fx-text-fill:#b9770e;";
+                    case INFO  -> "-fx-text-fill:#2471a3;";
+                });
+            }
+        });
 
-        ListView<String> awardList = new ListView<>();
-        awardList.getItems().setAll(awardPlugins.stream()
-                .map(a -> a.getAwardId() + "   —   " + a.getAwardName())
-                .sorted()
-                .collect(Collectors.toList()));
+        fileList.setCellFactory(lv -> new ListCell<>() {
+            @Override protected void updateItem(Path p, boolean empty) {
+                super.updateItem(p, empty);
+                setText(empty || p == null ? null
+                        : p.getParent().getFileName() + " / " + p.getFileName());
+            }
+        });
+        fileList.setOnMouseClicked(e -> {
+            if (e.getClickCount() == 2 && fileList.getSelectionModel().getSelectedItem() != null) {
+                openFile(fileList.getSelectionModel().getSelectedItem());
+            }
+        });
+        refreshFileList();
 
-        TabPane tabs = new TabPane(
-                new Tab("Contest plugins", contestList),
-                new Tab("Award plugins", awardList));
-        tabs.getTabs().forEach(t -> t.setClosable(false));
+        Button newContest = new Button("New Contest");
+        newContest.setOnAction(e -> { editor.setText(Skeletons.contest().stripIndent()); issues.getItems().clear(); status.setText("New contest from skeleton."); });
+        Button newAward = new Button("New Award");
+        newAward.setOnAction(e -> { editor.setText(Skeletons.award().stripIndent()); issues.getItems().clear(); status.setText("New award from skeleton."); });
+        Button open = new Button("Open…");
+        open.setOnAction(e -> openViaChooser(stage));
+        Button validate = new Button("Validate");
+        validate.setOnAction(e -> runValidate());
+        Button save = new Button("Save");
+        save.setOnAction(e -> runSave());
+        Button refresh = new Button("↻");
+        refresh.setOnAction(e -> refreshFileList());
 
-        Label note = new Label("Scaffold — editor, validation, and Cabrillo / score "
-                + "preview build on this shell. See ARS_Suite/docs/PLUGIN_FORMAT.md.");
-        note.setStyle("-fx-text-fill:#888; -fx-padding:6 0;");
+        ToolBar bar = new ToolBar(newContest, newAward, open, new Separator(), validate, save, new Separator(), refresh);
+
+        VBox top = new VBox(new Label(engineStatus), bar);
+        ((Label) top.getChildren().get(0)).setStyle("-fx-font-weight:bold; -fx-padding:6 8;");
+
+        SplitPane center = new SplitPane(withTitle("Your plugins (double-click to open)", fileList), editor);
+        center.setDividerPositions(0.28);
+
+        TitledPane issuePane = new TitledPane("Validation", issues);
+        issuePane.setCollapsible(false);
+        issuePane.setPrefHeight(180);
 
         BorderPane root = new BorderPane();
-        root.setTop(new VBox(header));
-        root.setCenter(tabs);
-        root.setBottom(note);
-        BorderPane.setMargin(root.getCenter(), new Insets(0));
-        root.setPadding(new Insets(10));
+        root.setTop(top);
+        root.setCenter(center);
+        root.setBottom(new VBox(issuePane, status));
+        status.setStyle("-fx-text-fill:#666; -fx-padding:4 8;");
+        VBox.setVgrow(issuePane, Priority.ALWAYS);
 
         stage.setTitle("ARS Plugin Builder " + version());
-        stage.setScene(new Scene(root, 720, 560));
+        stage.setScene(new Scene(root, 900, 680));
         stage.show();
     }
 
-    public static void main(String[] args) {
-        launch(args);
+    private VBox withTitle(String title, javafx.scene.Node node) {
+        Label l = new Label(title);
+        l.setStyle("-fx-font-size:11px; -fx-text-fill:#888; -fx-padding:4 0;");
+        VBox box = new VBox(l, node);
+        VBox.setVgrow(node, Priority.ALWAYS);
+        box.setPadding(new Insets(0, 6, 0, 0));
+        return box;
     }
+
+    private void refreshFileList() {
+        List<Path> files = new ArrayList<>();
+        files.addAll(listJson(PluginIo.userContestDir()));
+        files.addAll(listJson(PluginIo.userAwardDir()));
+        fileList.getItems().setAll(files);
+    }
+
+    private List<Path> listJson(Path dir) {
+        if (dir == null || !Files.isDirectory(dir)) return List.of();
+        try (Stream<Path> s = Files.list(dir)) {
+            return s.filter(p -> p.toString().endsWith(".json")).sorted().toList();
+        } catch (IOException e) { return List.of(); }
+    }
+
+    private void openViaChooser(Stage stage) {
+        FileChooser fc = new FileChooser();
+        fc.setTitle("Open plugin JSON");
+        fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("Plugin JSON", "*.json"));
+        Path home = PluginIo.userContestDir();
+        if (Files.isDirectory(home)) fc.setInitialDirectory(home.toFile());
+        java.io.File f = fc.showOpenDialog(stage);
+        if (f != null) openFile(f.toPath());
+    }
+
+    private void openFile(Path p) {
+        try {
+            editor.setText(Files.readString(p));
+            issues.getItems().clear();
+            status.setText("Opened " + p);
+        } catch (IOException e) {
+            status.setText("Open failed: " + e.getMessage());
+        }
+    }
+
+    private List<Issue> currentIssues() throws IOException {
+        ObjectNode node = PluginIo.parse(editor.getText());
+        if (node.has("contestId")) {
+            return PluginValidator.validateContest(node, PluginIo.toContest(node));
+        } else if (node.has("awardId")) {
+            return PluginValidator.validateAward(node, PluginIo.toAward(node));
+        }
+        throw new IOException("JSON has neither \"contestId\" nor \"awardId\" — can't tell if it's a contest or award plugin.");
+    }
+
+    private void runValidate() {
+        try {
+            List<Issue> list = currentIssues();
+            issues.getItems().setAll(list);
+            long errs = PluginValidator.errorCount(list);
+            status.setText(list.isEmpty() ? "✓ No issues." : (errs + " error(s), " + (list.size() - errs) + " warning(s)."));
+        } catch (Exception e) {
+            issues.getItems().clear();
+            status.setText("Parse error: " + e.getMessage());
+        }
+    }
+
+    private void runSave() {
+        try {
+            ObjectNode node = PluginIo.parse(editor.getText());
+            List<Issue> list = node.has("contestId")
+                    ? PluginValidator.validateContest(node, PluginIo.toContest(node))
+                    : node.has("awardId")
+                        ? PluginValidator.validateAward(node, PluginIo.toAward(node))
+                        : null;
+            if (list == null) { status.setText("JSON has no contestId/awardId — can't save."); return; }
+            issues.getItems().setAll(list);
+            long errs = PluginValidator.errorCount(list);
+            if (errs > 0) { status.setText("Fix " + errs + " error(s) before saving."); return; }
+            Path written = node.has("contestId") ? PluginIo.saveContest(node) : PluginIo.saveAward(node);
+            refreshFileList();
+            status.setText("Saved → " + written);
+        } catch (Exception e) {
+            status.setText("Save failed: " + e.getMessage());
+        }
+    }
+
+    public static void main(String[] args) { launch(args); }
 }
