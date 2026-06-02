@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.wm3j</groupId>
+    <artifactId>ars-plugin-builder</artifactId>
+    <version>0.1.0</version>
+    <packaging>jar</packaging>
+    <name>ARS Plugin Builder</name>
+    <description>Standalone authoring tool for WM3J ARS Suite contest &amp; award plugins.
+                 Depends on j-log-engine; NOT part of the suite build.</description>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.release>21</maven.compiler.release>
+        <javafx.version>21.0.3</javafx.version>
+    </properties>
+
+    <dependencies>
+        <!-- The suite engine: ContestPlugin/AwardPlugin models, PluginLoader/
+             AwardLoader, CabrilloExporter, AwardService. Build & `mvn install`
+             j-log-engine from the ARS_Suite checkout first (it lands in ~/.m2).
+             Jackson, SQLite, etc. come transitively. -->
+        <dependency>
+            <groupId>com.jlog</groupId>
+            <artifactId>j-log-engine</artifactId>
+            <version>1.5.0</version>
+        </dependency>
+
+        <!-- JavaFX — OS-specific native classifier so the assembled jar is
+             self-contained (no module path needed). Platform set by the
+             OS-activated profiles below. -->
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-controls</artifactId>
+            <version>${javafx.version}</version>
+            <classifier>${javafx.platform}</classifier>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-graphics</artifactId>
+            <version>${javafx.version}</version>
+            <classifier>${javafx.platform}</classifier>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.10.2</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <!-- Select the JavaFX native classifier by OS family + CPU arch. Mirrors the
+         suite: aarch64 Linux (Raspberry Pi) needs JavaFX 23.0.1 because 21.0.3
+         ships no linux-aarch64 native. -->
+    <profiles>
+        <profile>
+            <id>linux-aarch64</id>
+            <activation><os><family>unix</family><name>linux</name><arch>aarch64</arch></os></activation>
+            <properties><javafx.platform>linux-aarch64</javafx.platform><javafx.version>23.0.1</javafx.version></properties>
+        </profile>
+        <profile>
+            <id>linux-x64</id>
+            <activation><os><family>unix</family><name>linux</name><arch>amd64</arch></os></activation>
+            <properties><javafx.platform>linux</javafx.platform></properties>
+        </profile>
+        <profile>
+            <id>windows-x64</id>
+            <activation><os><family>windows</family></os></activation>
+            <properties><javafx.platform>win</javafx.platform></properties>
+        </profile>
+        <profile>
+            <id>mac-aarch64</id>
+            <activation><os><family>mac</family><arch>aarch64</arch></os></activation>
+            <properties><javafx.platform>mac-aarch64</javafx.platform></properties>
+        </profile>
+        <profile>
+            <id>mac-x64</id>
+            <activation><os><family>mac</family><arch>x86_64</arch></os></activation>
+            <properties><javafx.platform>mac</javafx.platform></properties>
+        </profile>
+    </profiles>
+
+    <build>
+        <finalName>ars-plugin-builder-${project.version}</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+                <configuration><release>${maven.compiler.release}</release></configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+            </plugin>
+            <!-- `mvn javafx:run` for dev -->
+            <plugin>
+                <groupId>org.openjfx</groupId>
+                <artifactId>javafx-maven-plugin</artifactId>
+                <version>0.0.8</version>
+                <configuration><mainClass>com.wm3j.pluginbuilder.PluginBuilderApp</mainClass></configuration>
+            </plugin>
+            <!-- Self-contained runnable jar. Main-Class is the non-Application
+                 Launcher shim so `java -jar` doesn't hit "JavaFX runtime
+                 components are missing". addDefaultImplementationEntries writes
+                 Implementation-Version so the app reads its version from the
+                 manifest (single source). -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <version>3.7.1</version>
+                <configuration>
+                    <appendAssemblyId>false</appendAssemblyId>
+                    <archive>
+                        <manifest>
+                            <mainClass>com.wm3j.pluginbuilder.Launcher</mainClass>
+                            <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+                        </manifest>
+                    </archive>
+                    <descriptorRefs><descriptorRef>jar-with-dependencies</descriptorRef></descriptorRefs>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>make-assembly</id>
+                        <phase>package</phase>
+                        <goals><goal>single</goal></goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
