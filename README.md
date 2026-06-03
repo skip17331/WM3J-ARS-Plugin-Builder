@@ -43,6 +43,18 @@ scalable icon — so **ARS Plugin Builder** appears in your application menu.
 Detects Java 21+ (and Maven, only if a build is needed) and advises if missing;
 never installs system packages.
 
+## Distributable AppImage (Linux)
+
+```bash
+./build-appimage.sh        # → dist/ARS_Plugin_Builder-<ver>-x86_64.AppImage
+```
+
+Produces one self-contained file that bundles a trimmed JRE (via `jlink`) plus
+the app — the target machine needs **nothing installed** (no Java, no Maven).
+Hand someone the file; they `chmod +x` it and run it. Relies only on a normal
+desktop's X11/GTK/OpenGL. Build host needs a JDK 21, `mksquashfs`, and (the
+first time) network access to fetch `appimagetool`. ~79 MB.
+
 ## How it relates to the suite
 
 - **Schema contract:** `ARS_Suite/docs/PLUGIN_FORMAT.md` — the code-verified
