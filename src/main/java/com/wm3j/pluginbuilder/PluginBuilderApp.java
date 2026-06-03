@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jlog.award.AwardLoader;
 import com.jlog.award.AwardPlugin;
 import com.jlog.db.DatabaseManager;
+import com.jlog.util.AppConfig;
 import com.jlog.plugin.ContestPlugin;
 import com.jlog.plugin.PluginLoader;
 import com.wm3j.pluginbuilder.core.PluginIo;
@@ -62,6 +63,7 @@ public class PluginBuilderApp extends Application {
     @Override
     public void init() {
         try {
+            AppConfig.getInstance().load();   // inits Java Preferences — required before initAll()/loaders
             DatabaseManager.getInstance().initAll();
             List<ContestPlugin> c = PluginLoader.getInstance().getAvailablePlugins();
             List<AwardPlugin> a = AwardLoader.getInstance().getAvailableAwards();
