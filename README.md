@@ -43,6 +43,13 @@ scalable icon — so **ARS Plugin Builder** appears in your application menu.
 Detects Java 21+ (and Maven, only if a build is needed) and advises if missing;
 never installs system packages.
 
+Want a **Desktop icon too** (and/or just the shortcuts, without reinstalling)?
+
+```bash
+./create-shortcuts.sh              # menu entry + a Desktop launcher icon
+./create-shortcuts.sh --uninstall  # remove the shortcuts
+```
+
 ## Distributable AppImage (Linux)
 
 ```bash
