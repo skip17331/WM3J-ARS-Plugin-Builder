@@ -1,0 +1,155 @@
+name: Release
+
+# Cuts a GitHub Release with ready-to-run, JRE-bundled artifacts for every
+# desktop platform. Fires on a version tag, or manually for an existing tag.
+#
+#   git tag v0.2.0 && git push origin v0.2.0      → builds + publishes the release
+#
+# macOS code-signing + notarization is OPT-IN: the sign-macos job is a no-op
+# until you add the Apple secrets (see SIGNING.md). Everything else publishes
+# unsigned, exactly like the hand-built v0.1.0.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to (re)build a release for, e.g. v0.1.0'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - name: Checkout builder
+        uses: actions/checkout@v4
+
+      - name: Checkout ARS Suite (provides j-log-engine)
+        uses: actions/checkout@v4
+        with:
+          repository: skip17331/WM3J-ARS-Suite
+          path: _suite
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Install packaging tools
+        run: sudo apt-get update && sudo apt-get install -y squashfs-tools zip
+
+      - name: Build & install j-log-engine
+        run: mvn -B -ntp -DskipTests -f _suite/j-log-engine/pom.xml install
+
+      - name: Cross-build all bundles
+        run: |
+          chmod +x build-appimage.sh build-bundles.sh
+          # AppImage FIRST: build-bundles.sh leaves the aarch64 jar in target/,
+          # which would poison an x86_64 AppImage if it ran afterwards.
+          ./build-appimage.sh
+          ./build-bundles.sh
+          echo "Artifacts:"; ls -lh dist/
+
+      - name: Resolve tag
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundles
+          path: dist/*
+          retention-days: 7
+
+  # OPT-IN: signs + notarizes the macOS .app bundles on a real Mac runner.
+  # No-ops (and never fails the release) until the Apple secrets exist.
+  sign-macos:
+    needs: build
+    runs-on: macos-14
+    env:
+      MACOS_CERT_P12_BASE64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+    steps:
+      - name: Gate on signing secret
+        id: gate
+        run: |
+          if [ -z "$MACOS_CERT_P12_BASE64" ]; then
+            echo "No MACOS_CERT_P12_BASE64 secret set — skipping signing (bundles stay unsigned)."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.gate.outputs.enabled == 'true'
+        uses: actions/checkout@v4
+
+      - name: Download bundles
+        if: steps.gate.outputs.enabled == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: bundles
+          path: dist
+
+      - name: Sign + notarize macOS apps
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          MACOS_NOTARY_API_KEY: ${{ secrets.MACOS_NOTARY_API_KEY }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+        run: bash .github/sign-macos.sh
+
+      - name: Upload signed macOS bundles
+        if: steps.gate.outputs.enabled == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundles-macos-signed
+          path: dist/*macos*.zip
+          overwrite: true
+
+  release:
+    needs: [build, sign-macos]
+    if: always() && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download bundles
+        uses: actions/download-artifact@v4
+        with:
+          name: bundles
+          path: dist
+
+      - name: Overlay signed macOS bundles (if produced)
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: bundles-macos-signed
+          path: dist
+
+      - name: Build release notes
+        run: bash .github/release-notes.sh "${{ needs.build.outputs.tag }}" > NOTES.md
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.build.outputs.tag }}
+          name: ARS Plugin Builder ${{ needs.build.outputs.tag }}
+          body_path: NOTES.md
+          files: dist/*
+          fail_on_unmatched_files: true

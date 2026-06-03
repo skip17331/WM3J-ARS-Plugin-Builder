@@ -106,6 +106,20 @@ repo ever needs to build on a machine without the suite checked out, switch to a
 git submodule of the engine or publish `j-log-engine` to GitHub Packages and pin
 the version.
 
+## Releases & CI
+
+Releases are automated. Pushing a version tag builds every bundle and publishes
+a GitHub Release with the artifacts + SHA-256 checksums:
+
+```bash
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+(`.github/workflows/release.yml` — also runnable manually for an existing tag via
+the Actions tab.) macOS code-signing + notarization is opt-in and activates when
+the Apple secrets are present; see [SIGNING.md](SIGNING.md) for that and the
+Windows signing story.
+
 ## License
 
 [MIT](LICENSE) © 2026 Mike Kipps (WM3J).
