@@ -62,6 +62,29 @@ Hand someone the file; they `chmod +x` it and run it. Relies only on a normal
 desktop's X11/GTK/OpenGL. Build host needs a JDK 21, `mksquashfs`, and (the
 first time) network access to fetch `appimagetool`. ~79 MB.
 
+## Cross-platform portable bundles (Windows / macOS / Raspberry Pi)
+
+```bash
+./build-bundles.sh         # → four zips in dist/ (all built from Linux)
+```
+
+Cross-builds self-contained, bundled-JRE zips — the target needs **no Java**:
+
+| Bundle | Run it by |
+| --- | --- |
+| `…-windows-x64.zip` | double-clicking `ARS Plugin Builder.bat` |
+| `…-macos-arm64.zip` / `…-macos-x64.zip` | opening `ARS Plugin Builder.app` |
+| `…-linux-arm64-rpi.zip` | `./run.sh` (Raspberry Pi) |
+
+It rebuilds the fat jar per platform with that OS's JavaFX natives, cross-`jlink`s
+a trimmed JRE from each target's Adoptium JDK (downloaded/cached under `build/`),
+adds a launcher, and zips. Needs a JDK 21, Maven, and network the first time
+(~1 GB of JDKs, cached after). **Unsigned**: Windows SmartScreen may warn;
+macOS Gatekeeper needs a first-run right-click → **Open** (or
+`xattr -cr "ARS Plugin Builder.app"`). Built on Linux, so smoke-test on the real
+OS before wide distribution. Raspberry Pi uses JavaFX 23.0.1 (21.x has no
+linux-aarch64 build).
+
 ## How it relates to the suite
 
 - **Schema contract:** `ARS_Suite/docs/PLUGIN_FORMAT.md` — the code-verified
