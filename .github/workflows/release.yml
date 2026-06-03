@@ -121,8 +121,100 @@ jobs:
           path: dist/*macos*.zip
           overwrite: true
 
+  # Wraps the prebuilt Windows bundle into a jpackage installer .exe (a signable,
+  # SmartScreen-relevant artifact). signtool signing is OPT-IN: no-ops until the
+  # Windows cert secrets exist, so the .exe just publishes unsigned by default.
+  windows-installer:
+    needs: build
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      WINDOWS_CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (provides jpackage)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Download bundles
+        uses: actions/download-artifact@v4
+        with:
+          name: bundles
+          path: dist
+
+      - name: Resolve version
+        id: ver
+        run: |
+          $ver = "${{ needs.build.outputs.tag }}" -replace '^v',''
+          if ($ver -notmatch '^\d') { $ver = '1.0.0' }
+          "version=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Install Inno Setup (jpackage --type exe backend)
+        run: |
+          choco install innosetup --no-progress -y
+          "C:\Program Files (x86)\Inno Setup 6" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Unpack Windows bundle (reuse the cross-built jar + JRE)
+        run: |
+          $zip = (Get-ChildItem dist\*windows-x64.zip)[0].FullName
+          Expand-Archive -Path $zip -DestinationPath unpacked -Force
+          $app = (Get-ChildItem unpacked -Directory)[0].FullName
+          New-Item -ItemType Directory -Force input | Out-Null
+          Copy-Item "$app\ars-plugin-builder.jar" input\
+          "RUNTIME=$app\runtime" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: jpackage -> installer .exe
+        run: |
+          $iconArgs = @()
+          if (Test-Path packaging\ars-plugin-builder.ico) { $iconArgs = @('--icon','packaging\ars-plugin-builder.ico') }
+          jpackage --type exe --name "ARS Plugin Builder" --app-version ${{ steps.ver.outputs.version }} `
+            --vendor "WM3J" --copyright "MIT (c) 2026 Mike Kipps (WM3J)" `
+            --input input --main-jar ars-plugin-builder.jar --main-class com.wm3j.pluginbuilder.Launcher `
+            --runtime-image "$env:RUNTIME" `
+            --win-per-user-install --win-menu --win-shortcut --win-dir-chooser `
+            --dest out @iconArgs
+          $exe = (Get-ChildItem out\*.exe)[0].FullName
+          $target = "dist\ARS_Plugin_Builder-${{ steps.ver.outputs.version }}-windows-x64-setup.exe"
+          Move-Item $exe $target -Force
+          "INSTALLER=$target" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "Built $target"
+
+      - name: Gate on signing cert
+        id: gate
+        run: |
+          if ([string]::IsNullOrEmpty($env:WINDOWS_CERT_PFX_BASE64)) {
+            Write-Host "No WINDOWS_CERT_PFX_BASE64 secret - installer stays unsigned."
+            "enabled=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          } else {
+            "enabled=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          }
+
+      - name: Sign installer (signtool)
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          [IO.File]::WriteAllBytes("cert.pfx", [Convert]::FromBase64String($env:WINDOWS_CERT_PFX_BASE64))
+          $st = (Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" |
+                 Sort-Object FullName -Descending | Select-Object -First 1).FullName
+          & $st sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f cert.pfx /p "$env:WINDOWS_CERT_PASSWORD" "$env:INSTALLER"
+          & $st verify /pa "$env:INSTALLER"
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: dist\*-windows-x64-setup.exe
+          overwrite: true
+
   release:
-    needs: [build, sign-macos]
+    needs: [build, sign-macos, windows-installer]
     if: always() && needs.build.result == 'success'
     runs-on: ubuntu-latest
     steps:
@@ -140,6 +232,13 @@ jobs:
         continue-on-error: true
         with:
           name: bundles-macos-signed
+          path: dist
+
+      - name: Add Windows installer (if produced)
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: windows-installer
           path: dist
 
       - name: Build release notes

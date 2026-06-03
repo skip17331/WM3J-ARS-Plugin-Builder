@@ -18,7 +18,8 @@ to \`~/.j-log/{plugins,awards}/\`.
 
 | Platform | File | How to run |
 | --- | --- | --- |
-| **Windows x64** | \`*-windows-x64.zip\` | unzip → double-click **ARS Plugin Builder.bat** |
+| **Windows x64 (installer)** | \`*-windows-x64-setup.exe\` | run it → installs + Start-menu shortcut |
+| **Windows x64 (portable)** | \`*-windows-x64.zip\` | unzip → double-click **ARS Plugin Builder.bat** (no install) |
 | **macOS (Apple Silicon)** | \`*-macos-arm64.zip\` | unzip → open **ARS Plugin Builder.app** |
 | **macOS (Intel)** | \`*-macos-x64.zip\` | unzip → open **ARS Plugin Builder.app** |
 | **Linux x86_64** | \`*-x86_64.AppImage\` | \`chmod +x\` then run |
@@ -29,12 +30,14 @@ If a build is **unsigned** (no signing secrets configured for this release):
 - **Windows:** SmartScreen → **More info → Run anyway**.
 - **macOS:** Gatekeeper → **right-click the app → Open** (or \`xattr -cr "ARS Plugin Builder.app"\`).
 
-When the Apple signing secrets are configured the macOS apps are signed &
-notarized, so they open with no Gatekeeper prompt.
+When the signing secrets are configured, the Windows installer is
+Authenticode-signed and the macOS apps are signed & notarized, so they launch
+with no warning. (The portable Windows .zip is never signed — use the installer
+if you want the signed path.)
 
 ### SHA-256
 \`\`\`
 EOF
 
-( cd dist && sha256sum ARS_Plugin_Builder-*.zip ARS_Plugin_Builder-*.AppImage 2>/dev/null )
+( cd dist && sha256sum ARS_Plugin_Builder-* 2>/dev/null )
 echo '```'

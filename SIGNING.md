@@ -38,27 +38,35 @@ With those set, the next tagged release produces signed + notarized
 codesign → notarytool → stapler recipe; verify the first signed build opens
 cleanly on a real Mac, since it can't be tested without the cert.)
 
-## Windows — not wired (format mismatch, documented honestly)
+## Windows — supported, opt-in
 
-Authenticode signs PE files (`.exe`/`.dll`/`.msi`). Our Windows deliverable is a
-**zip of a folder** with a `.bat` launcher — there is no single PE that
-represents "the app", so signing the zip is not a thing, and SmartScreen
-reputation is keyed to the **downloaded file**, not the bundled (already
-Adoptium-signed) `javaw.exe`.
+The `windows-installer` job (in `.github/workflows/release.yml`, on a real
+`windows-latest` runner) wraps the build into a `jpackage` **installer `.exe`** —
+a proper PE that Authenticode *can* sign and that SmartScreen reputation attaches
+to (the portable `.zip` can't be signed; that's why the installer exists). The
+`signtool` step is a no-op until the cert secrets are set; then the installer is
+signed automatically.
 
-To actually benefit you'd switch the Windows deliverable to a signed installer:
+What you need (one-time): a **code-signing certificate** as a `.pfx`. Options:
 
-1. Build a `jpackage` `.exe`/`.msi` on a `windows-latest` runner (jpackage can't
-   cross-compile, so this is a separate native job — not the current Linux
-   cross-build).
-2. Sign it with `signtool` using a code-signing certificate — a CA-issued OV/EV
-   cert (~$200–400/yr from DigiCert, Sectigo, …) or **Azure Trusted Signing**
-   (cheaper, cloud-based). EV/Trusted Signing also clears SmartScreen instantly;
-   a plain OV cert needs reputation to build up.
+- A CA-issued cert — **OV** (~$200–400/yr, DigiCert / Sectigo / …) or **EV**.
+  EV clears SmartScreen instantly; a plain OV cert builds reputation over the
+  first downloads.
+- **Azure Trusted Signing** — cheaper, cloud-based, no `.pfx` to manage (clears
+  SmartScreen like EV). If you go this route, swap the `signtool` step for the
+  `azure/trusted-signing-action` — say the word and I'll wire it.
 
-This is a real chunk of work and a paid cert; it's deliberately left as a future
-step rather than half-built. Until then Windows users click **More info → Run
-anyway** once.
+Then add these repository secrets:
+
+| Secret | Value |
+| --- | --- |
+| `WINDOWS_CERT_PFX_BASE64` | `base64 -w0 cert.pfx` (the cert, base64-encoded) |
+| `WINDOWS_CERT_PASSWORD` | the `.pfx` password |
+
+With those set, the next tagged release produces a signed
+`*-windows-x64-setup.exe`. (The timestamp URL in the job defaults to DigiCert's;
+change it if your CA specifies another. Verify the first signed installer on a
+real Windows box, since it can't be tested without the cert.)
 
 ## Linux
 
