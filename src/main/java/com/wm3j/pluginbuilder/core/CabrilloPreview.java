@@ -43,7 +43,7 @@ public final class CabrilloPreview {
               + " <their call> " + rcvd + "\n"
               + "\n"
               + "— Header is exact (matches the engine). The exchange line shows field\n"
-              + "  ORDER, not scored values. Full score/multiplier preview is pending the\n"
-              + "  engine scoring refactor (contest scoring lives in j-log's controller).";
+              + "  ORDER, not scored values. The score/multiplier/dupe breakdown below is\n"
+              + "  computed by the real engine scorer over your sample QSOs.";
     }
 }
