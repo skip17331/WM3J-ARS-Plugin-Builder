@@ -106,4 +106,8 @@ repo ever needs to build on a machine without the suite checked out, switch to a
 git submodule of the engine or publish `j-log-engine` to GitHub Packages and pin
 the version.
 
+## License
+
+[MIT](LICENSE) © 2026 Mike Kipps (WM3J).
+
 🤖 Companion tool for the WM3J ARS Suite.
