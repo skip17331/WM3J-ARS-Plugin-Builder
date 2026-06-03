@@ -8,8 +8,9 @@ It **supports** the ARS Suite but is **not part of it**: a separate repo that
 depends on the suite's `j-log-engine` so its validation and previews run against
 the *real* engine, not a re-implementation.
 
-> Status: **scaffold.** The shell builds, wires in `j-log-engine`, and lists the
-> plugins the engine can see. The editor / validators / preview build on top.
+> **New here?** The **[User Guide](USER_GUIDE.md)** walks through building a
+> contest or award plugin end to end — the tabs, validation, the live score
+> preview, and saving into the suite.
 
 ## Prerequisites
 
