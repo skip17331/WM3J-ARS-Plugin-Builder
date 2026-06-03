@@ -30,6 +30,19 @@ mvn clean package          # builds target/ars-plugin-builder-0.1.0.jar (self-co
 # dev loop: mvn javafx:run
 ```
 
+## Install (Linux)
+
+```bash
+./install.sh               # builds (if needed) + installs under ~/.local; re-run to upgrade
+./install.sh --uninstall   # remove
+```
+
+No root, XDG-compliant: drops the jar in `~/.local/share/ars-plugin-builder/`, a
+launcher at `~/.local/bin/ars-plugin-builder`, a `.desktop` entry, and a
+scalable icon — so **ARS Plugin Builder** appears in your application menu.
+Detects Java 21+ (and Maven, only if a build is needed) and advises if missing;
+never installs system packages.
+
 ## How it relates to the suite
 
 - **Schema contract:** `ARS_Suite/docs/PLUGIN_FORMAT.md` — the code-verified
